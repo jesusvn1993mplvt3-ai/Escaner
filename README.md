@@ -1,0 +1,2 @@
+# Escaner
+Escáner para papeletas
