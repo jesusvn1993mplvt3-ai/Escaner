@@ -13,6 +13,8 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+    
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -23,30 +25,27 @@
         /* ESTILOS GENERALES DE LA APP */
         body { background-color: #f1f5f9; height: 100vh; overflow: hidden; font-family: 'Roboto Condensed', sans-serif; }
         
-        /* ESTILOS DE LA ETIQUETA (LABEL) */
+        /* ESTILOS DE LA ETIQUETA (VISUALIZACIÓN PANTALLA) */
         .label-wrapper {
-            margin-bottom: 2rem; /* mb-8 */
-            padding: 1rem; /* p-4 */
-            background: white; /* bg-white */
-            border-radius: 0.5rem; /* rounded */
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* shadow-xl */
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
             transition: box-shadow 0.2s;
+            page-break-inside: avoid; /* Evita que se parta a la mitad */
         }
-        .label-wrapper:hover {
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); /* hover:shadow-2xl */
-        }
-
+        
         .label-preview-container {
             width: 6in;
             height: 4in;
             background-color: white;
             position: relative;
             box-sizing: border-box;
-            border: 2px solid #000; /* Borde de la etiqueta para previsualización */
+            border: 2px solid #000;
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            transition: transform 0.2s;
         }
 
         /* Estilos internos de la etiqueta */
@@ -59,7 +58,6 @@
         .lbl-medium { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 26px; line-height: 1; color: #000; white-space: nowrap; }
         .lbl-small { font-size: 16px; font-weight: 700; color: #000; }
         
-        /* Ajustes específicos para filas de la etiqueta */
         .row-header { height: 18%; }
         .row-info { height: 12%; }
         .row-desc { height: 10%; align-items: center; }
@@ -67,56 +65,67 @@
         .row-details { height: 23%; }
         .row-footer { height: 15%; }
 
-        /* ESTILOS CRÍTICOS DE IMPRESIÓN PARA ZEBRA (6x4) */
-        @media print {
-            /* Define el tamaño de la hoja de papel y elimina márgenes */
-            @page { size: 6in 4in; margin: 0; }
-            
-            body { 
-                background: white; 
-                -webkit-print-color-adjust: exact; 
-                margin: 0; 
-                padding: 0;
-            }
-            .no-print { display: none !important; }
-
-            .print-container {
-                display: block;
-                overflow: visible !important;
-                width: 6in;
-                height: 4in;
-                padding: 0;
-                margin: 0;
-            }
-
-            /* Contenedor de cada papeleta: ocupa el 100% de la hoja y fuerza el salto de página */
-            .label-wrapper {
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 6in;
-                height: 4in;
-                page-break-after: always; /* ¡La clave para una etiqueta por página! */
-                box-shadow: none !important;
-                background: white !important;
-                border-radius: 0;
-            }
-
-            /* Evita el salto de página después de la última etiqueta */
-            .label-wrapper:last-child {
-                page-break-after: avoid;
-            }
-
-            /* Asegura que la etiqueta interna no tenga estilos de sombra extra */
-            .label-preview-container { 
-                border: 2px solid #000 !important; /* Mantiene el borde estructural */
-                transform: none !important; 
-                box-shadow: none !important; 
-                margin: 0; 
-            }
-        }
-
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* --- ESTILOS CRÍTICOS DE IMPRESIÓN (6x4 EXACTO) --- */
+        @media print {
+            @page { 
+                size: 6in 4in; 
+                margin: 0mm; /* Márgenes cero para impresoras térmicas */
+            }
+            
+            html, body {
+                height: auto !important;
+                overflow: visible !important;
+                background: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            .no-print { display: none !important; }
+
+            /* El contenedor principal de impresión */
+            .print-container {
+                display: block !important;
+                width: 100% !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+                overflow: visible !important;
+                position: static !important;
+            }
+
+            /* Forzar salto de página exacto */
+            .label-wrapper {
+                display: block !important;
+                width: 6in !important;
+                height: 4in !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                
+                /* La clave para 1 etiqueta por hoja */
+                break-after: page; 
+                page-break-after: always; 
+                page-break-inside: avoid;
+            }
+
+            /* Eliminar salto después de la última para no sacar hoja blanca extra */
+            .label-wrapper:last-child {
+                break-after: auto;
+                page-break-after: auto;
+            }
+
+            .label-preview-container {
+                border: 2px solid #000 !important; 
+                width: 6in !important;
+                height: 4in !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -138,7 +147,7 @@
         
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const FieldValue = firebase.firestore.FieldValue; // Para el timestamp del servidor
+        const FieldValue = firebase.firestore.FieldValue; 
 
         // --- COMPONENTE ICONO ---
         const Icon = ({ name, size = 18, className }) => {
@@ -176,15 +185,13 @@
                         JsBarcode(svgRef.current, barcodeValue, {
                             format: "CODE128",
                             lineColor: "#000",
-                            width: 1,      
+                            width: 1.5,      
                             height: 40,      
                             displayValue: false,
                             margin: 0
                         });
-                        
                         svgRef.current.style.width = '2.5in';
                         svgRef.current.style.height = 'auto'; 
-
                     } catch (e) { console.error("Error barcode", e); }
                 }
             }, [barcodeValue]);
@@ -193,7 +200,6 @@
 
             return (
                 <div className="label-preview-container">
-                    {/* FILA 1: MODELO | TOTAL */}
                     <div className="lbl-row row-header">
                         <div className="lbl-col" style={{width: '60%'}}>
                             <div className="lbl-title">MODELO</div>
@@ -204,8 +210,6 @@
                             <div className="lbl-big">{order.totalPedido || 0}</div>
                         </div>
                     </div>
-
-                    {/* FILA 2: PARTIDA | CLIENTE */}
                     <div className="lbl-row row-info">
                         <div className="lbl-col" style={{width: '50%'}}>
                             <div className="lbl-title">PARTIDA</div>
@@ -216,16 +220,12 @@
                             <div className="lbl-medium" style={{fontSize: order.cliente?.length > 10 ? '22px' : '26px'}}>{order.cliente || '---'}</div>
                         </div>
                     </div>
-
-                    {/* FILA 3: DESCRIPCION */}
                     <div className="lbl-row row-desc">
                         <div className="lbl-col" style={{flexDirection: 'row', alignItems: 'baseline', gap: '10px', width: '100%'}}>
                             <span className="lbl-title">DESCRIPCION:</span>
                             <span style={{fontSize: '16px', fontWeight: 'bold'}}>{subPiece.pieza || 'ESTANDAR'}</span>
                         </div>
                     </div>
-
-                    {/* FILA 4: METRICAS CENTRALES */}
                     <div className="lbl-row row-metrics">
                         <div className="lbl-col" style={{width: '33.33%', textAlign: 'center'}}>
                             <div className="lbl-title" style={{fontSize: '11px'}}>PAQUETE<br/>ACTUAL</div>
@@ -240,8 +240,6 @@
                             <div className="lbl-big" style={{fontSize: '48px'}}>{order.maquina || '0'}</div>
                         </div>
                     </div>
-
-                    {/* FILA 5: MATERIALES Y DETALLES */}
                     <div className="lbl-row row-details">
                         <div style={{width: '50%', display: 'flex', flexDirection: 'column', borderRight: '2px solid black'}}>
                             <div style={{flex: 1, display: 'flex', alignItems: 'center', borderBottom: '1px solid black', padding: '0 5px'}}>
@@ -268,8 +266,6 @@
                             </div>
                         </div>
                     </div>
-
-                    {/* FILA 6: FOOTER (FECHA Y BARCODE) */}
                     <div className="lbl-row row-footer" style={{padding: '0 10px', alignItems: 'center', justifyContent: 'space-between'}}>
                         <div style={{display: 'flex', flexDirection: 'column'}}>
                             <div className="lbl-title">FECHA DE ENTREGA</div>
@@ -284,160 +280,157 @@
             );
         };
 
-        // --- COMPONENTE RASTREADOR DE ESCANEO ---
+        // --- COMPONENTE RASTREADOR DE ESCANEO (Con Lógica Unificada y Cámara) ---
         const ScanTracker = ({ allOrders, selectedOrder, setSelectedOrder, packageLabels, onScan }) => {
             const [scannedData, setScannedData] = useState([]);
             const [scanInput, setScanInput] = useState('');
             const [scanStatus, setScanStatus] = useState({ message: 'Esperando escaneo...', type: 'info' });
+            const [showCamera, setShowCamera] = useState(false);
+            
             const inputRef = useRef(null);
+            const scannerRef = useRef(null);
             
             const orderId = selectedOrder?.id;
             const orderCode = selectedOrder?.codigo;
-            const orderPartida = selectedOrder?.partida;
-            const tejedoraName = "Baitza"; // Hardcodeado como ejemplo (se puede mejorar)
+            const tejedoraName = "Baitza"; 
 
-            // Obtener el estado actual de los escaneos para la ORDEN SELECCIONADA
+            // Obtener datos
             useEffect(() => {
                 if (!orderId) {
                     setScannedData([]);
-                    // Si no hay orden, mostramos un estado de escaneo rápido.
-                    setScanStatus({ message: 'Modo Escaneo Rápido: Escanee cualquier código de paquete.', type: 'info' });
+                    setScanStatus({ message: 'Modo Escaneo Rápido: Escanee cualquier código.', type: 'info' });
                     return;
                 }
-                
-                // Suscripción en tiempo real a los documentos de la orden actual
                 const unsubscribe = db.collection('registro_produccion')
                     .where('orderId', '==', String(orderId)) 
                     .onSnapshot(snapshot => {
                         const data = snapshot.docs.map(doc => doc.data());
                         setScannedData(data);
-                        setScanStatus({ message: `Orden ${orderCode} cargada. Escaneando paquetes...`, type: 'info' });
+                        setScanStatus({ message: `Orden ${orderCode} cargada. Escaneando...`, type: 'info' });
                     }, error => {
-                        console.error("Error al obtener escaneos:", error);
-                        setScanStatus({ message: `Error al cargar escaneos de la orden.`, type: 'error' });
+                        console.error(error);
                     });
-
                 return () => unsubscribe();
             }, [orderId, orderCode]);
             
-            // Enfocar el input
+            // Enfocar input al cargar (si no está la cámara)
             useEffect(() => {
-                if (inputRef.current) {
+                if (inputRef.current && !showCamera) {
                     inputRef.current.focus();
                 }
-            }, [orderId]);
+            }, [orderId, showCamera]);
 
-            // Clasificar etiquetas en Escaneadas y Pendientes
-            const { scannedPackages, pendingPackages } = useMemo(() => {
-                if (!orderId) return { scannedPackages: [], pendingPackages: [] };
-
-                const scannedCodes = new Set(scannedData.map(d => d.codigo_paquete));
-                const packages = packageLabels.map(label => ({
-                    ...label,
-                    isScanned: scannedCodes.has(label.packageCode),
-                    // Buscar la fecha de escaneo en los datos (match por codigo_paquete)
-                    scanTime: scannedData.find(d => d.codigo_paquete === label.packageCode)?.fecha_legible || null, 
-                }));
+            // Lógica de Cámara
+            useEffect(() => {
+                if (showCamera) {
+                    // Pequeño timeout para asegurar que el DOM del modal se renderizó
+                    setTimeout(() => {
+                        const html5QrcodeScanner = new Html5QrcodeScanner(
+                            "reader", 
+                            { fps: 10, qrbox: { width: 250, height: 150 } },
+                            /* verbose= */ false
+                        );
+                        
+                        html5QrcodeScanner.render((decodedText) => {
+                            // Éxito al escanear
+                            console.log(`Scan result: ${decodedText}`);
+                            processScannedCode(decodedText);
+                            html5QrcodeScanner.clear();
+                            setShowCamera(false);
+                        }, (errorMessage) => {
+                            // parse error, ignore loop
+                        });
+                        
+                        scannerRef.current = html5QrcodeScanner;
+                    }, 100);
+                } else {
+                    if (scannerRef.current) {
+                        scannerRef.current.clear().catch(err => console.error("Error clearing scanner", err));
+                        scannerRef.current = null;
+                    }
+                }
                 
-                return {
-                    scannedPackages: packages.filter(p => p.isScanned),
-                    pendingPackages: packages.filter(p => !p.isScanned)
+                // Cleanup
+                return () => {
+                    if (scannerRef.current) {
+                        scannerRef.current.clear().catch(err => console.error("Cleanup scanner", err));
+                    }
                 };
-            }, [packageLabels, scannedData, orderId]);
-            
-            // Función auxiliar para calcular piezas en paquete (necesario para Quick Scan)
+            }, [showCamera]);
+
+
+            // Calcular piezas
             const calculatePiecesInPackage = (order, packageIndex) => {
                 const totalPieces = order.totalPedido || 0;
                 const packageSizeValue = order.packageSize === 'VARIO' || !order.packageSize ? 50 : (Number(order.packageSize) || 50); 
                 const N = totalPieces > 0 ? Math.ceil(totalPieces / packageSizeValue) : 1; 
-
                 if (packageIndex < N) return packageSizeValue;
-                
-                // Si es el último paquete
                 return totalPieces % packageSizeValue || packageSizeValue;
             };
 
-            // Manejar la acción de escaneo (ENTER)
-            const handleScanSubmit = async (e) => {
-                e.preventDefault();
-                let rawCode = scanInput.trim().toUpperCase(); 
-                setScanInput(''); // Limpiar inmediatamente el input
+            // --- LÓGICA PRINCIPAL DE PROCESAMIENTO (Separada para usarse en Input y Cámara) ---
+            const processScannedCode = async (rawCode) => {
+                if (!rawCode) return;
                 
-                if (!rawCode) {
-                    setScanStatus({ message: 'Código inválido.', type: 'error' });
-                    return;
-                }
+                rawCode = rawCode.trim().toUpperCase();
                 
-                // --- LÓGICA DE NORMALIZACIÓN DEL CÓDIGO ESCANEADO ---
-                // M024'DIC25?02'1 -> M024-DIC25_02-1
-                let normalizedCode = rawCode.replace(/'/g, '-');
-                normalizedCode = normalizedCode.replace(/\?/g, '_');
+                // Normalización
+                let normalizedCode = rawCode.replace(/'/g, '-').replace(/\?/g, '_');
                 
                 const codeParts = normalizedCode.split('-');
                 if (codeParts.length !== 3) {
-                    setScanStatus({ message: `Error: El código ${rawCode} no tiene el formato esperado (CÓDIGO-PARTIDA-ÍNDICE).`, type: 'error' });
+                    setScanStatus({ message: `Error formato: ${rawCode} no es válido.`, type: 'error' });
                     return;
                 }
                 
                 const [modelCode, partidaPart, packageIndexStr] = codeParts;
                 const packageIndex = Number(packageIndexStr);
                 
-                // --- FLUJO DE TRABAJO ---
-                
                 let orderToScan = selectedOrder;
                 let isQuickScan = false;
                 
-                // 1. Si no hay orden seleccionada, buscamos la orden.
                 if (!selectedOrder) {
                     isQuickScan = true;
-                    
                     const foundOrder = allOrders.find(o => 
                         String(o.codigo).toUpperCase() === modelCode && 
                         String(o.partida).toUpperCase() === partidaPart
                     );
-
                     if (!foundOrder) {
-                        setScanStatus({ message: `Error: Código ${normalizedCode} no encontrado en ninguna orden activa.`, type: 'error' });
+                        setScanStatus({ message: `Código ${normalizedCode} no encontrado.`, type: 'error' });
                         return;
                     }
                     orderToScan = foundOrder;
                 } 
-                // 1b. Si hay una orden seleccionada, verificamos que el escaneo le pertenezca.
                 else if (normalizedCode !== packageLabels.find(p => p.packageCode === normalizedCode)?.packageCode) {
-                    setScanStatus({ message: `Error: El código ${normalizedCode} no pertenece a la orden ${orderCode} seleccionada.`, type: 'error' });
+                    setScanStatus({ message: `Error: Código no pertenece a esta orden.`, type: 'error' });
                     return;
                 }
 
-                // 2. Obtener datos para el registro (ya sea Quick Scan o Scan Normal)
                 const totalPieces = orderToScan.totalPedido || 0;
                 const packageSizeValue = orderToScan.packageSize === 'VARIO' || !orderToScan.packageSize ? 50 : (Number(orderToScan.packageSize) || 50); 
                 const totalPackages = totalPieces > 0 ? Math.ceil(totalPieces / packageSizeValue) : 1; 
                 
                 if (packageIndex > totalPackages || packageIndex < 1) {
-                    setScanStatus({ message: `Error: Índice de paquete (${packageIndex}) fuera de rango para la orden ${orderToScan.codigo}.`, type: 'error' });
+                    setScanStatus({ message: `Paquete fuera de rango.`, type: 'error' });
                     return;
                 }
                 
                 const piecesInThisPackage = calculatePiecesInPackage(orderToScan, packageIndex);
 
-
-                // 3. Revisar si ya fue escaneado (en la colección global si es Quick Scan, o en la lista local si es seleccionado)
+                // Check duplicado
                 const globalScanCheck = await db.collection('registro_produccion')
                                                 .where('codigo_paquete', '==', normalizedCode)
                                                 .get();
                 if (!globalScanCheck.empty) {
-                    setScanStatus({ message: `Advertencia: Paquete ${packageIndex}/${totalPackages} de ${modelCode} ya fue escaneado.`, type: 'warning' });
-                    // Si es Quick Scan, seleccionamos la orden de todos modos.
+                    setScanStatus({ message: `Advertencia: Paquete ${packageIndex} ya escaneado.`, type: 'warning' });
                     if (isQuickScan) setSelectedOrder(orderToScan); 
                     return;
                 }
 
-
-                // 4. Registrar escaneo en 'registro_produccion'
+                // Guardar
                 try {
                     const docRef = db.collection('registro_produccion').doc();
-                    
-                    const scanData = {
+                    await docRef.set({
                         codigo_paquete: normalizedCode, 
                         orderId: String(orderToScan.id), 
                         fecha: FieldValue.serverTimestamp(),
@@ -452,26 +445,41 @@
                         paquete_indice: packageIndex,
                         paquete_total: totalPackages,
                         piezas_en_paquete: piecesInThisPackage
-                    };
+                    });
 
-                    await docRef.set(scanData);
-
-                    let successMessage = `Éxito: Paquete ${packageIndex}/${totalPackages} de ${orderToScan.codigo} escaneado.`;
-                    
-                    // Si fue Quick Scan, seleccionamos la orden y notificamos al usuario.
+                    let successMessage = `OK: Pqte ${packageIndex}/${totalPackages} registrado.`;
                     if (isQuickScan) {
                         setSelectedOrder(orderToScan);
-                        successMessage = `Éxito: Orden ${orderToScan.codigo} cargada y Paquete ${packageIndex}/${totalPackages} registrado.`;
+                        successMessage = `Orden cargada y Pqte ${packageIndex} registrado.`;
                     }
                     
                     setScanStatus({ message: successMessage, type: 'success' });
-                    onScan(); // Notificar al componente padre para forzar el re-render de la lista de escaneos
+                    onScan();
                 } catch (error) {
-                    setScanStatus({ message: `Error al registrar escaneo: ${error.message}`, type: 'error' });
+                    setScanStatus({ message: `Error DB: ${error.message}`, type: 'error' });
                 }
             };
+
+            const handleInputSubmit = (e) => {
+                e.preventDefault();
+                processScannedCode(scanInput);
+                setScanInput('');
+            };
             
-            // Colores del estado de escaneo
+            const { scannedPackages, pendingPackages } = useMemo(() => {
+                if (!orderId) return { scannedPackages: [], pendingPackages: [] };
+                const scannedCodes = new Set(scannedData.map(d => d.codigo_paquete));
+                const packages = packageLabels.map(label => ({
+                    ...label,
+                    isScanned: scannedCodes.has(label.packageCode),
+                    scanTime: scannedData.find(d => d.codigo_paquete === label.packageCode)?.fecha_legible || null, 
+                }));
+                return {
+                    scannedPackages: packages.filter(p => p.isScanned),
+                    pendingPackages: packages.filter(p => !p.isScanned)
+                };
+            }, [packageLabels, scannedData, orderId]);
+
             const statusClasses = {
                 info: 'bg-blue-100 text-blue-800',
                 success: 'bg-green-100 text-green-800',
@@ -480,16 +488,38 @@
             };
 
             return (
-                <div className="w-96 bg-white border-l border-slate-200 flex flex-col no-print">
+                <div className="w-96 bg-white border-l border-slate-200 flex flex-col no-print relative">
+                    
+                    {/* MODAL CÁMARA */}
+                    {showCamera && (
+                        <div className="absolute inset-0 bg-slate-900 z-50 flex flex-col p-2">
+                            <div className="flex justify-between items-center text-white mb-2">
+                                <span className="font-bold">Escaneando...</span>
+                                <button onClick={() => setShowCamera(false)} className="bg-red-600 px-3 py-1 rounded text-xs">CERRAR</button>
+                            </div>
+                            <div id="reader" className="bg-white w-full h-64"></div>
+                            <p className="text-white text-xs text-center mt-2">Apunta al código de barras</p>
+                        </div>
+                    )}
+
                     <div className="p-4 border-b bg-slate-50">
-                        <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800"><Icon name="scan"/> Control de Escaneo</h3>
-                        <form onSubmit={handleScanSubmit} className="mt-3">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800"><Icon name="scan"/> Control</h3>
+                            <button 
+                                onClick={() => setShowCamera(!showCamera)}
+                                className={`text-xs px-3 py-1.5 rounded flex items-center gap-1 font-bold ${showCamera ? 'bg-red-100 text-red-700' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                            >
+                                <Icon name="camera" size={14} /> {showCamera ? 'CANCELAR' : 'USAR CÁMARA'}
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleInputSubmit} className="mt-1">
                             <input 
                                 ref={inputRef}
                                 type="text" 
                                 value={scanInput}
                                 onChange={e => setScanInput(e.target.value)}
-                                placeholder={selectedOrder ? `Escanea paquete de ${selectedOrder.codigo}` : 'Escaneo Rápido (Modelo-Partida-Índice)'}
+                                placeholder={selectedOrder ? `Escanear...` : 'Modo Rápido'}
                                 className="w-full border-2 border-slate-300 rounded p-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
                                 autoFocus
                             />
@@ -497,52 +527,38 @@
                         <div className={`mt-2 p-1.5 rounded text-xs text-center ${statusClasses[scanStatus.type]}`}>{scanStatus.message}</div>
                     </div>
 
-                    {selectedOrder && (
+                    {selectedOrder ? (
                         <div className="flex-grow overflow-y-auto p-3 space-y-4">
-                            
-                            {/* PENDIENTES */}
                             <div className="bg-red-50 p-3 rounded">
                                 <h4 className="font-bold text-red-800 flex items-center gap-1 mb-2"><Icon name="clock" size={14}/> PENDIENTES ({pendingPackages.length})</h4>
                                 <div className="grid grid-cols-4 gap-2">
                                     {pendingPackages.map(p => (
-                                        <div key={p.packageCode} className="p-1 text-center bg-white border border-red-300 rounded text-xs font-mono">
-                                            {p.packageIndex}
-                                        </div>
+                                        <div key={p.packageCode} className="p-1 text-center bg-white border border-red-300 rounded text-xs font-mono">{p.packageIndex}</div>
                                     ))}
-                                    {pendingPackages.length === 0 && <p className="text-xs text-red-600 col-span-4 italic">¡Todos los paquetes han sido escaneados!</p>}
+                                    {pendingPackages.length === 0 && <p className="text-xs text-red-600 col-span-4 italic">¡Completado!</p>}
                                 </div>
                             </div>
-
-                            {/* ESCANEADOS */}
                             <div className="bg-green-50 p-3 rounded">
-                                <h4 className="font-bold text-green-800 flex items-center gap-1 mb-2"><Icon name="check-circle" size={14}/> ESCANEADOS ({scannedPackages.length})</h4>
+                                <h4 className="font-bold text-green-800 flex items-center gap-1 mb-2"><Icon name="check-circle" size={14}/> LISTOS ({scannedPackages.length})</h4>
                                 <div className="grid grid-cols-4 gap-2">
                                     {scannedPackages.map(p => (
                                         <div key={p.packageCode} className="p-1 text-center bg-white border border-green-300 rounded text-xs font-mono relative group">
                                             {p.packageIndex}
-                                            {p.scanTime && (
-                                                <span className="absolute top-0 right-0 -mt-2 -mr-2 bg-green-500 text-white text-[8px] px-1 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                                    {p.scanTime}
-                                                </span>
-                                            )}
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         </div>
-                    )}
-                    
-                    {!selectedOrder && (
+                    ) : (
                         <div className="flex-grow flex items-center justify-center p-6 text-center text-slate-500">
                             <p className="p-4 border border-dashed border-slate-300 rounded text-sm bg-slate-50">
-                                Escanee un código para cargar automáticamente la orden y registrar el paquete.
+                                Usa la pistola o la cámara para cargar una orden.
                             </p>
                         </div>
                     )}
                 </div>
             );
         };
-
 
         // --- APP PRINCIPAL ---
         const App = () => {
@@ -553,7 +569,6 @@
             const [filterText, setFilterText] = useState('');
             const [scanTrackerKey, setScanTrackerKey] = useState(0); 
 
-            // Función para generar los datos de las papeletas por paquete (SE MANTIENE SIN CAMBIOS)
             const generatePackageLabels = (order) => {
                 const totalPieces = order.totalPedido || 0;
                 const packageSizeValue = order.packageSize === 'VARIO' || !order.packageSize ? 50 : (Number(order.packageSize) || 50); 
@@ -562,28 +577,23 @@
                 const labels = [];
                 for (let i = 1; i <= N; i++) {
                     const piecesInThisPackage = i < N ? packageSizeValue : (totalPieces % packageSizeValue || packageSizeValue);
-                    
-                    // CÓDIGO CLAVE: Formato para registro_produccion: CODIGO-PARTIDA-INDICE
                     const packageCode = `${order.codigo}-${order.partida}-${i}`;
-
                     labels.push({
                         ...order,
                         packageIndex: i, 
                         totalPackages: N, 
                         piecesInPackage: piecesInThisPackage,
-                        packageCode: packageCode, // Código final (Ej: M024-DIC25_02-1)
+                        packageCode: packageCode, 
                         displayPackageId: `${i}/${N}`, 
                     });
                 }
                 return labels;
             };
 
-            // Recargar escaneos después de un escaneo exitoso
             const handleSuccessfulScan = useCallback(() => {
                 setScanTrackerKey(prev => prev + 1); 
             }, []);
 
-            // 1. Cargar órdenes activas
             useEffect(() => {
                 const unsubscribe = db.collection('orders')
                     .where('status', '!=', 'ARCHIVADO')
@@ -596,11 +606,9 @@
                         console.error("Error fetching orders:", error);
                         setLoading(false);
                     });
-                
                 return () => unsubscribe();
             }, []);
             
-            // 2. Generar papeletas y resetear el tracker al seleccionar una orden
             useEffect(() => {
                 if (selectedOrder) {
                     setPackageLabels(generatePackageLabels(selectedOrder));
@@ -610,8 +618,6 @@
                 }
             }, [selectedOrder]);
 
-
-            // Filtrado
             const filteredOrders = useMemo(() => {
                 if (!filterText) return orders;
                 const txt = filterText.toUpperCase();
@@ -629,17 +635,15 @@
 
             const handleArchive = async () => {
                 if(!selectedOrder) return;
-                
-                if(window.confirm(`¿Estás seguro de que ya imprimiste todas las ${packageLabels.length} papeletas para ${selectedOrder.codigo}?\n\nLa orden se marcará como ARCHIVADA y desaparecerá de esta lista.`)) {
+                if(window.confirm(`¿Archivar orden ${selectedOrder.codigo}?`)) {
                     try {
                         await db.collection('orders').doc(String(selectedOrder.id)).update({
                             status: 'ARCHIVADO',
                             printDate: new Date().toISOString()
                         });
                         setSelectedOrder(null);
-                        window.alert("Orden archivada correctamente.");
                     } catch (error) {
-                        window.alert("Error al archivar: " + error.message);
+                        window.alert("Error: " + error.message);
                     }
                 }
             };
@@ -647,19 +651,16 @@
             return (
                 <div className="flex h-screen w-full">
                     
-                    {/* COLUMNA 1: BARRA LATERAL (GENERADOR) */}
+                    {/* COLUMNA 1: BARRA LATERAL */}
                     <div className="w-96 bg-slate-800 text-white flex flex-col border-r border-slate-700 shadow-xl no-print z-10">
-                        {/* Contenido de la barra lateral (Header, Input de búsqueda, Lista de órdenes) */}
                         <div className="p-4 border-b border-slate-700 bg-slate-900">
                             <h1 className="text-xl font-bold flex items-center gap-2 text-yellow-400">
-                                <Icon name="printer" /> GENERADOR PAPELETAS
+                                <Icon name="printer" /> GENERADOR
                             </h1>
-                            <p className="text-xs text-slate-400 mt-1">Selecciona una orden.</p>
-                            
                             <div className="mt-4 relative">
                                 <input 
                                     type="text" 
-                                    placeholder="Buscar modelo, cliente..." 
+                                    placeholder="Buscar..." 
                                     value={filterText}
                                     onChange={e => setFilterText(e.target.value)}
                                     className="w-full bg-slate-800 border border-slate-600 rounded p-2 pl-8 text-sm focus:border-yellow-400 focus:outline-none"
@@ -670,13 +671,6 @@
 
                         <div className="flex-grow overflow-y-auto p-2 space-y-2">
                             {loading && <div className="flex justify-center p-10"><div className="loader"></div></div>}
-                            
-                            {!loading && filteredOrders.length === 0 && (
-                                <div className="text-center text-slate-500 p-8 text-sm">
-                                    No hay órdenes activas encontradas.
-                                </div>
-                            )}
-
                             {filteredOrders.map(order => (
                                 <div 
                                     key={order.id}
@@ -695,49 +689,36 @@
                                 </div>
                             ))}
                         </div>
-                        
-                        <div className="p-4 text-xs text-center text-slate-500 border-t border-slate-700 bg-slate-900">
-                            Sistema Textil Cloud v2.1
-                        </div>
+                        <div className="p-4 text-xs text-center text-slate-500 border-t border-slate-700 bg-slate-900">v2.5 + Cámara</div>
                     </div>
 
-                    {/* COLUMNA 2: ÁREA PRINCIPAL (PREVISUALIZACIÓN / IMPRESIÓN) */}
+                    {/* COLUMNA 2: ÁREA PRINCIPAL */}
                     <div className="flex-grow flex-shrink min-w-0 bg-slate-100 flex flex-col relative overflow-auto">
-                        
-                        {/* HEADER DE ACCIONES (SOLO PANTALLA) */}
                         <div className="bg-white p-4 shadow-sm border-b flex justify-between items-center no-print sticky top-0 z-10">
                             <div>
                                 {selectedOrder ? (
                                     <h2 className="font-bold text-slate-700 flex items-center gap-2">
-                                        VISTA PREVIA: <span className="text-black">{selectedOrder.codigo}</span>
-                                        <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">{packageLabels.length} Papeletas generadas</span>
+                                        {selectedOrder.codigo}
+                                        <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">{packageLabels.length} Papeletas</span>
                                     </h2>
                                 ) : (
-                                    <h2 className="font-bold text-slate-400">Ninguna orden seleccionada</h2>
+                                    <h2 className="font-bold text-slate-400">Seleccione orden</h2>
                                 )}
                             </div>
                             <div className="flex gap-3">
                                 {selectedOrder && (
                                     <>
-                                        <button 
-                                            onClick={handleArchive} 
-                                            className="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition flex items-center gap-2 text-sm"
-                                            title="Mover a historial"
-                                        >
-                                            <Icon name="archive" size={16}/> ARCHIVAR ORDEN
+                                        <button onClick={handleArchive} className="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded font-bold hover:bg-red-50 hover:text-red-600 text-sm">
+                                            ARCHIVAR
                                         </button>
-                                        <button 
-                                            onClick={handlePrint} 
-                                            className="px-6 py-2 bg-slate-900 text-white rounded font-bold hover:bg-slate-700 shadow-lg transition flex items-center gap-2"
-                                        >
-                                            <Icon name="printer" size={18}/> IMPRIMIR ({packageLabels.length})
+                                        <button onClick={handlePrint} className="px-6 py-2 bg-slate-900 text-white rounded font-bold hover:bg-slate-700 shadow-lg transition flex items-center gap-2">
+                                            <Icon name="printer" size={18}/> IMPRIMIR
                                         </button>
                                     </>
                                 )}
                             </div>
                         </div>
 
-                        {/* CONTENEDOR CENTRAL DE PAPELETAS (SCROLLABLE) */}
                         <div className="flex-grow flex flex-col items-center p-10 bg-slate-200 overflow-y-auto print-container">
                             {packageLabels.length > 0 ? (
                                 packageLabels.map((labelData, index) => (
@@ -748,17 +729,16 @@
                             ) : (
                                 <div className="text-center text-slate-400 flex flex-col items-center mt-20">
                                     <Icon name="arrow-left-circle" size={48} className="mb-4 opacity-50"/>
-                                    <p className="text-lg font-bold">Selecciona una orden del menú izquierdo</p>
-                                    <p className="text-sm">Para generar y visualizar sus papeletas.</p>
+                                    <p className="text-lg font-bold">Selecciona una orden</p>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    {/* COLUMNA 3: LECTOR / TRACKER (Siempre visible para Escaneo Rápido) */}
+                    {/* COLUMNA 3: TRACKER */}
                     <ScanTracker 
                         key={scanTrackerKey} 
-                        allOrders={orders} // Lista completa de órdenes
+                        allOrders={orders} 
                         selectedOrder={selectedOrder}
                         setSelectedOrder={setSelectedOrder}
                         packageLabels={packageLabels}
