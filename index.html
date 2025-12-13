@@ -168,8 +168,6 @@
             const currentPackageDisplay = order.displayPackageId || '1/1';
             const piecesInPackage = order.piecesInPackage || (order.packageSize === 'VARIO' ? 'VAR' : (order.packageSize || 50));
             
-            // Contenido del código de barras: CÓDIGO_MODELO-PARTIDA-INDICE
-            // Se mantiene el formato original solicitado: {código}-{partida}-{índice_paquete}
             const barcodeValue = order.packageCode || `${order.codigo}-${order.partida}-1`;
 
             useEffect(() => {
@@ -184,7 +182,6 @@
                             margin: 0
                         });
                         
-                        // Fuerza el ancho del SVG para la impresión 6x4
                         svgRef.current.style.width = '2.5in';
                         svgRef.current.style.height = 'auto'; 
 
@@ -288,19 +285,23 @@
         };
 
         // --- COMPONENTE RASTREADOR DE ESCANEO ---
-        const ScanTracker = ({ orderId, orderCode, orderPartida, packageLabels, onScan }) => {
+        const ScanTracker = ({ allOrders, selectedOrder, setSelectedOrder, packageLabels, onScan }) => {
             const [scannedData, setScannedData] = useState([]);
             const [scanInput, setScanInput] = useState('');
             const [scanStatus, setScanStatus] = useState({ message: 'Esperando escaneo...', type: 'info' });
             const inputRef = useRef(null);
             
-            // Constante para el tejedor (se podría obtener de un contexto de usuario)
-            const tejedoraName = "Baitza"; // Hardcodeado como ejemplo (ver registro en DB)
+            const orderId = selectedOrder?.id;
+            const orderCode = selectedOrder?.codigo;
+            const orderPartida = selectedOrder?.partida;
+            const tejedoraName = "Baitza"; // Hardcodeado como ejemplo (se puede mejorar)
 
-            // Obtener el estado actual de los escaneos para la orden
+            // Obtener el estado actual de los escaneos para la ORDEN SELECCIONADA
             useEffect(() => {
                 if (!orderId) {
                     setScannedData([]);
+                    // Si no hay orden, mostramos un estado de escaneo rápido.
+                    setScanStatus({ message: 'Modo Escaneo Rápido: Escanee cualquier código de paquete.', type: 'info' });
                     return;
                 }
                 
@@ -310,12 +311,14 @@
                     .onSnapshot(snapshot => {
                         const data = snapshot.docs.map(doc => doc.data());
                         setScannedData(data);
+                        setScanStatus({ message: `Orden ${orderCode} cargada. Escaneando paquetes...`, type: 'info' });
                     }, error => {
                         console.error("Error al obtener escaneos:", error);
+                        setScanStatus({ message: `Error al cargar escaneos de la orden.`, type: 'error' });
                     });
 
                 return () => unsubscribe();
-            }, [orderId]);
+            }, [orderId, orderCode]);
             
             // Enfocar el input
             useEffect(() => {
@@ -326,67 +329,117 @@
 
             // Clasificar etiquetas en Escaneadas y Pendientes
             const { scannedPackages, pendingPackages } = useMemo(() => {
+                if (!orderId) return { scannedPackages: [], pendingPackages: [] };
+
                 const scannedCodes = new Set(scannedData.map(d => d.codigo_paquete));
                 const packages = packageLabels.map(label => ({
                     ...label,
                     isScanned: scannedCodes.has(label.packageCode),
-                    scanTime: scannedData.find(d => d.codigo_paquete === label.packageCode)?.fecha_legible || null,
+                    // Buscar la fecha de escaneo en los datos (match por codigo_paquete)
+                    scanTime: scannedData.find(d => d.codigo_paquete === label.packageCode)?.fecha_legible || null, 
                 }));
                 
                 return {
                     scannedPackages: packages.filter(p => p.isScanned),
                     pendingPackages: packages.filter(p => !p.isScanned)
                 };
-            }, [packageLabels, scannedData]);
+            }, [packageLabels, scannedData, orderId]);
+            
+            // Función auxiliar para calcular piezas en paquete (necesario para Quick Scan)
+            const calculatePiecesInPackage = (order, packageIndex) => {
+                const totalPieces = order.totalPedido || 0;
+                const packageSizeValue = order.packageSize === 'VARIO' || !order.packageSize ? 50 : (Number(order.packageSize) || 50); 
+                const N = totalPieces > 0 ? Math.ceil(totalPieces / packageSizeValue) : 1; 
 
+                if (packageIndex < N) return packageSizeValue;
+                
+                // Si es el último paquete
+                return totalPieces % packageSizeValue || packageSizeValue;
+            };
 
             // Manejar la acción de escaneo (ENTER)
             const handleScanSubmit = async (e) => {
                 e.preventDefault();
-                let code = scanInput.trim().toUpperCase(); 
+                let rawCode = scanInput.trim().toUpperCase(); 
                 setScanInput(''); // Limpiar inmediatamente el input
                 
-                if (!code || !orderId) {
-                    setScanStatus({ message: 'Código inválido o no hay orden seleccionada.', type: 'error' });
+                if (!rawCode) {
+                    setScanStatus({ message: 'Código inválido.', type: 'error' });
                     return;
                 }
                 
-                // ----------------------------------------------------
                 // --- LÓGICA DE NORMALIZACIÓN DEL CÓDIGO ESCANEADO ---
-                // ----------------------------------------------------
-                // El escáner envía M024'DIC25?02'1
-                // 1. Reemplazar comillas simples (') por guiones (-)
-                code = code.replace(/'/g, '-');
-                // Resultado intermedio: M024-DIC25?02-1
+                // M024'DIC25?02'1 -> M024-DIC25_02-1
+                let normalizedCode = rawCode.replace(/'/g, '-');
+                normalizedCode = normalizedCode.replace(/\?/g, '_');
                 
-                // 2. Reemplazar signos de interrogación (?) por guiones bajos (_)
-                code = code.replace(/\?/g, '_');
-                // Resultado final (normalizado): M024-DIC25_02-1
-                // ----------------------------------------------------
-
-                // Buscar el paquete objetivo por el código normalizado
-                const targetPackage = packageLabels.find(p => p.packageCode === code);
-
-                if (!targetPackage) {
-                    setScanStatus({ message: `Error: El código ${code} normalizado no pertenece a esta orden.`, type: 'error' });
+                const codeParts = normalizedCode.split('-');
+                if (codeParts.length !== 3) {
+                    setScanStatus({ message: `Error: El código ${rawCode} no tiene el formato esperado (CÓDIGO-PARTIDA-ÍNDICE).`, type: 'error' });
                     return;
                 }
                 
-                // 1. Revisar si ya fue escaneado
-                const isAlreadyScanned = scannedPackages.some(p => p.packageCode === code);
+                const [modelCode, partidaPart, packageIndexStr] = codeParts;
+                const packageIndex = Number(packageIndexStr);
+                
+                // --- FLUJO DE TRABAJO ---
+                
+                let orderToScan = selectedOrder;
+                let isQuickScan = false;
+                
+                // 1. Si no hay orden seleccionada, buscamos la orden.
+                if (!selectedOrder) {
+                    isQuickScan = true;
+                    
+                    const foundOrder = allOrders.find(o => 
+                        String(o.codigo).toUpperCase() === modelCode && 
+                        String(o.partida).toUpperCase() === partidaPart
+                    );
 
-                if (isAlreadyScanned) {
-                    setScanStatus({ message: `Advertencia: Paquete ${targetPackage.displayPackageId} ya fue escaneado.`, type: 'warning' });
+                    if (!foundOrder) {
+                        setScanStatus({ message: `Error: Código ${normalizedCode} no encontrado en ninguna orden activa.`, type: 'error' });
+                        return;
+                    }
+                    orderToScan = foundOrder;
+                } 
+                // 1b. Si hay una orden seleccionada, verificamos que el escaneo le pertenezca.
+                else if (normalizedCode !== packageLabels.find(p => p.packageCode === normalizedCode)?.packageCode) {
+                    setScanStatus({ message: `Error: El código ${normalizedCode} no pertenece a la orden ${orderCode} seleccionada.`, type: 'error' });
                     return;
                 }
 
-                // 2. Registrar escaneo en 'registro_produccion'
+                // 2. Obtener datos para el registro (ya sea Quick Scan o Scan Normal)
+                const totalPieces = orderToScan.totalPedido || 0;
+                const packageSizeValue = orderToScan.packageSize === 'VARIO' || !orderToScan.packageSize ? 50 : (Number(orderToScan.packageSize) || 50); 
+                const totalPackages = totalPieces > 0 ? Math.ceil(totalPieces / packageSizeValue) : 1; 
+                
+                if (packageIndex > totalPackages || packageIndex < 1) {
+                    setScanStatus({ message: `Error: Índice de paquete (${packageIndex}) fuera de rango para la orden ${orderToScan.codigo}.`, type: 'error' });
+                    return;
+                }
+                
+                const piecesInThisPackage = calculatePiecesInPackage(orderToScan, packageIndex);
+
+
+                // 3. Revisar si ya fue escaneado (en la colección global si es Quick Scan, o en la lista local si es seleccionado)
+                const globalScanCheck = await db.collection('registro_produccion')
+                                                .where('codigo_paquete', '==', normalizedCode)
+                                                .get();
+                if (!globalScanCheck.empty) {
+                    setScanStatus({ message: `Advertencia: Paquete ${packageIndex}/${totalPackages} de ${modelCode} ya fue escaneado.`, type: 'warning' });
+                    // Si es Quick Scan, seleccionamos la orden de todos modos.
+                    if (isQuickScan) setSelectedOrder(orderToScan); 
+                    return;
+                }
+
+
+                // 4. Registrar escaneo en 'registro_produccion'
                 try {
                     const docRef = db.collection('registro_produccion').doc();
                     
                     const scanData = {
-                        codigo_paquete: code, // Código normalizado (Ej: M024-DIC25_02-1)
-                        orderId: String(orderId), 
+                        codigo_paquete: normalizedCode, 
+                        orderId: String(orderToScan.id), 
                         fecha: FieldValue.serverTimestamp(),
                         fecha_scan: new Date().toLocaleTimeString('es-MX') + ' p.m.', 
                         fecha_legible: new Date().toLocaleDateString('es-MX', {
@@ -394,17 +447,25 @@
                         }).replace(/\//g, '/'), 
                         tejedor: tejedoraName,
                         tipo: "produccion",
-                        // Otros datos útiles
-                        modelo: orderCode,
-                        partida: orderPartida,
-                        paquete_indice: targetPackage.packageIndex,
-                        paquete_total: targetPackage.totalPackages,
+                        modelo: orderToScan.codigo,
+                        partida: orderToScan.partida,
+                        paquete_indice: packageIndex,
+                        paquete_total: totalPackages,
+                        piezas_en_paquete: piecesInThisPackage
                     };
 
                     await docRef.set(scanData);
 
-                    setScanStatus({ message: `Éxito: Paquete ${targetPackage.displayPackageId} escaneado.`, type: 'success' });
-                    onScan(); // Notificar al componente padre
+                    let successMessage = `Éxito: Paquete ${packageIndex}/${totalPackages} de ${orderToScan.codigo} escaneado.`;
+                    
+                    // Si fue Quick Scan, seleccionamos la orden y notificamos al usuario.
+                    if (isQuickScan) {
+                        setSelectedOrder(orderToScan);
+                        successMessage = `Éxito: Orden ${orderToScan.codigo} cargada y Paquete ${packageIndex}/${totalPackages} registrado.`;
+                    }
+                    
+                    setScanStatus({ message: successMessage, type: 'success' });
+                    onScan(); // Notificar al componente padre para forzar el re-render de la lista de escaneos
                 } catch (error) {
                     setScanStatus({ message: `Error al registrar escaneo: ${error.message}`, type: 'error' });
                 }
@@ -428,7 +489,7 @@
                                 type="text" 
                                 value={scanInput}
                                 onChange={e => setScanInput(e.target.value)}
-                                placeholder="Escanea aquí el código de paquete"
+                                placeholder={selectedOrder ? `Escanea paquete de ${selectedOrder.codigo}` : 'Escaneo Rápido (Modelo-Partida-Índice)'}
                                 className="w-full border-2 border-slate-300 rounded p-2 text-sm focus:border-blue-500 focus:outline-none font-mono"
                                 autoFocus
                             />
@@ -436,39 +497,48 @@
                         <div className={`mt-2 p-1.5 rounded text-xs text-center ${statusClasses[scanStatus.type]}`}>{scanStatus.message}</div>
                     </div>
 
-                    <div className="flex-grow overflow-y-auto p-3 space-y-4">
-                        
-                        {/* PENDIENTES */}
-                        <div className="bg-red-50 p-3 rounded">
-                            <h4 className="font-bold text-red-800 flex items-center gap-1 mb-2"><Icon name="clock" size={14}/> PENDIENTES ({pendingPackages.length})</h4>
-                            <div className="grid grid-cols-4 gap-2">
-                                {pendingPackages.map(p => (
-                                    <div key={p.packageCode} className="p-1 text-center bg-white border border-red-300 rounded text-xs font-mono">
-                                        {p.packageIndex}
-                                    </div>
-                                ))}
-                                {pendingPackages.length === 0 && <p className="text-xs text-red-600 col-span-4 italic">¡Todos los paquetes han sido escaneados!</p>}
+                    {selectedOrder && (
+                        <div className="flex-grow overflow-y-auto p-3 space-y-4">
+                            
+                            {/* PENDIENTES */}
+                            <div className="bg-red-50 p-3 rounded">
+                                <h4 className="font-bold text-red-800 flex items-center gap-1 mb-2"><Icon name="clock" size={14}/> PENDIENTES ({pendingPackages.length})</h4>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {pendingPackages.map(p => (
+                                        <div key={p.packageCode} className="p-1 text-center bg-white border border-red-300 rounded text-xs font-mono">
+                                            {p.packageIndex}
+                                        </div>
+                                    ))}
+                                    {pendingPackages.length === 0 && <p className="text-xs text-red-600 col-span-4 italic">¡Todos los paquetes han sido escaneados!</p>}
+                                </div>
+                            </div>
+
+                            {/* ESCANEADOS */}
+                            <div className="bg-green-50 p-3 rounded">
+                                <h4 className="font-bold text-green-800 flex items-center gap-1 mb-2"><Icon name="check-circle" size={14}/> ESCANEADOS ({scannedPackages.length})</h4>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {scannedPackages.map(p => (
+                                        <div key={p.packageCode} className="p-1 text-center bg-white border border-green-300 rounded text-xs font-mono relative group">
+                                            {p.packageIndex}
+                                            {p.scanTime && (
+                                                <span className="absolute top-0 right-0 -mt-2 -mr-2 bg-green-500 text-white text-[8px] px-1 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                    {p.scanTime}
+                                                </span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
-
-                        {/* ESCANEADOS */}
-                        <div className="bg-green-50 p-3 rounded">
-                            <h4 className="font-bold text-green-800 flex items-center gap-1 mb-2"><Icon name="check-circle" size={14}/> ESCANEADOS ({scannedPackages.length})</h4>
-                            <div className="grid grid-cols-4 gap-2">
-                                {scannedPackages.map(p => (
-                                    <div key={p.packageCode} className="p-1 text-center bg-white border border-green-300 rounded text-xs font-mono relative group">
-                                        {p.packageIndex}
-                                        {p.scanTime && (
-                                            <span className="absolute top-0 right-0 -mt-2 -mr-2 bg-green-500 text-white text-[8px] px-1 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                                {p.scanTime}
-                                            </span>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
+                    )}
+                    
+                    {!selectedOrder && (
+                        <div className="flex-grow flex items-center justify-center p-6 text-center text-slate-500">
+                            <p className="p-4 border border-dashed border-slate-300 rounded text-sm bg-slate-50">
+                                Escanee un código para cargar automáticamente la orden y registrar el paquete.
+                            </p>
                         </div>
-
-                    </div>
+                    )}
                 </div>
             );
         };
@@ -685,17 +755,15 @@
                         </div>
                     </div>
 
-                    {/* COLUMNA 3: LECTOR / TRACKER */}
-                    {selectedOrder && (
-                        <ScanTracker 
-                            key={selectedOrder.id + '-' + scanTrackerKey} 
-                            orderId={selectedOrder.id}
-                            orderCode={selectedOrder.codigo}
-                            orderPartida={selectedOrder.partida}
-                            packageLabels={packageLabels}
-                            onScan={handleSuccessfulScan}
-                        />
-                    )}
+                    {/* COLUMNA 3: LECTOR / TRACKER (Siempre visible para Escaneo Rápido) */}
+                    <ScanTracker 
+                        key={scanTrackerKey} 
+                        allOrders={orders} // Lista completa de órdenes
+                        selectedOrder={selectedOrder}
+                        setSelectedOrder={setSelectedOrder}
+                        packageLabels={packageLabels}
+                        onScan={handleSuccessfulScan}
+                    />
                 </div>
             );
         };
