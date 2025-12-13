@@ -117,7 +117,7 @@
             </p>
         </div>
 
-        <p class="mt-8 text-slate-400 text-sm">Versión Escáner v2.0 - Compatible con Generador de Papeletas</p>
+        <p class="mt-8 text-slate-400 text-sm">Versión Escáner v2.1 - Compatible con Generador de Papeletas</p>
     </main>
 
     <div id="modalOverlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center opacity-0 transition-opacity duration-200">
@@ -144,13 +144,29 @@
                     </div>
                 </div>
 
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <p class="text-xs text-slate-500 uppercase font-bold">Modelo</p>
+                        <p class="text-xl font-oswald font-bold text-slate-800" id="modalModel">---</p>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <p class="text-xs text-slate-500 uppercase font-bold">Paquete</p>
+                        <p class="text-xl font-oswald font-bold text-slate-800" id="modalPackageDisplay">---</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <p class="text-xs text-slate-500 uppercase font-bold">Cliente / Partida</p>
+                    <p class="text-lg font-bold text-slate-800" id="modalClientPartida">---</p>
+                </div>
+                
                 <div class="flex items-center gap-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
                     <div class="bg-blue-200 p-2 rounded-full text-blue-600">
                         <i data-lucide="box" class="w-6 h-6"></i>
                     </div>
                     <div class="overflow-hidden">
-                        <p class="text-xs text-blue-500 uppercase font-bold">Código de Paquete</p>
-                        <p class="text-xl font-oswald font-bold text-blue-800 leading-tight break-all" id="modalCode">---</p>
+                        <p class="text-xs text-blue-500 uppercase font-bold">Código Escaneado</p>
+                        <p class="text-sm font-mono font-bold text-blue-800 leading-tight break-all" id="modalBarcodeValue">---</p>
                     </div>
                 </div>
 
@@ -210,11 +226,20 @@
         const historyList = document.getElementById('historyList');
         const scanCount = document.getElementById('scanCount');
         let sessionScans = 0;
-        let currentScanCode = "";
+        
+        // **NUEVA** Variable global para la información de la orden combinada
+        let currentOrderData = null;
+
+        // **NUEVAS** Referencias a elementos del modal
+        const modalModel = document.getElementById('modalModel');
+        const modalPackageDisplay = document.getElementById('modalPackageDisplay');
+        const modalBarcodeValue = document.getElementById('modalBarcodeValue');
+        const modalClientPartida = document.getElementById('modalClientPartida');
+        const modalWeaver = document.getElementById('modalWeaver');
+
 
         // 4. GESTIÓN DEL FOCO (Siempre mantener foco en input)
         document.addEventListener('click', (e) => {
-            // Si el modal NO está abierto y no estamos escribiendo el nombre del tejedor
             if (modalOverlay.classList.contains('hidden') && e.target !== weaverInput) {
                 barcodeInput.focus();
             }
@@ -241,18 +266,49 @@
             localStorage.setItem('cirineo_tejedor', weaverInput.value);
         });
 
-        // 5. LÓGICA DE ESCANEO
+        // **NUEVA** Función para parsear el código de barras complejo
+        function parseBarcode(code) {
+            // Formato: ID_ORDEN-PARTIDA-CODIGO-PAQUETE_TOTAL|INDICE_ARRAY
+            const parts = code.split('-'); 
+            if (parts.length < 4) return null;
+
+            const packageData = parts[3].split('|'); // ['1_5', '0']
+            const packageCounts = packageData[0].split('_'); // ['1', '5']
+
+            return {
+                orderId: parts[0],
+                partida: parts[1],
+                codigo: parts[2],
+                paqueteActual: packageCounts[0],
+                paquetesTotales: packageCounts[1],
+                displayPackageId: `${packageCounts[0]}/${packageCounts[1]}`,
+                fullCode: code
+            };
+        }
+
+        // **NUEVA** Función para actualizar el modal con datos de la orden
+        function updateModalWithOrderData(order, barcodeDetails) {
+            modalModel.textContent = order.codigo || 'S/N';
+            modalPackageDisplay.textContent = barcodeDetails.displayPackageId;
+            modalBarcodeValue.textContent = barcodeDetails.fullCode;
+            modalClientPartida.textContent = `${order.cliente || 'N/A'} / ${order.partida || 'N/A'}`;
+            document.getElementById('modalDate').textContent = new Date().toLocaleString('es-MX');
+            modalWeaver.textContent = weaverInput.value;
+            
+            // Re-renderizar iconos nuevos (si se insertan dinámicamente)
+            lucide.createIcons();
+        }
+
+        // 5. LÓGICA DE ESCANEO (MODIFICADA)
         barcodeInput.addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
                 const code = this.value.trim();
                 
-                // Validación básica
                 if (!code) return;
 
-                // Validar Tejedor
+                // 1. Validar Tejedor
                 if (!weaverInput.value.trim()) {
                     errorMsg.classList.remove('hidden');
-                    // Vibrar si es móvil
                     if(navigator.vibrate) navigator.vibrate(200);
                     this.value = "";
                     return;
@@ -270,26 +326,65 @@
         });
 
         function handleScan(code) {
-            currentScanCode = code;
+            // 1. Parsear el código de barras
+            const barcodeDetails = parseBarcode(code);
+            if (!barcodeDetails) {
+                alert("Error de formato: El código escaneado no es compatible o no es válido.");
+                barcodeInput.focus();
+                return;
+            }
             
-            // Llenar datos del modal
-            document.getElementById('modalWeaver').textContent = weaverInput.value;
-            document.getElementById('modalCode').textContent = code;
+            // 2. Mostrar estado de carga mientras se busca en DB
+            // Pre-llenar datos fijos en el modal
+            modalWeaver.textContent = weaverInput.value;
+            modalBarcodeValue.textContent = code;
             document.getElementById('modalDate').textContent = new Date().toLocaleString('es-MX');
-
+            
+            // Mostrar modal con loading
             openModal();
+            btnConfirm.classList.add('hidden');
+            btnCancel.classList.add('hidden');
+            btnLoading.classList.remove('hidden');
+            
+            // 3. Consultar Firebase usando el Order ID
+            const orderId = barcodeDetails.orderId;
+
+            db.collection('orders').doc(orderId).get()
+            .then(doc => {
+                if (doc.exists) {
+                    const orderData = doc.data();
+                    
+                    // Almacenar todos los datos combinados para guardar
+                    currentOrderData = {
+                        ...orderData,
+                        ...barcodeDetails // Incluye fullCode, paqueteActual, etc.
+                    };
+
+                    updateModalWithOrderData(orderData, barcodeDetails);
+                    
+                    // Mostrar botones de confirmación
+                    resetModalButtons();
+                } else {
+                    alert("Error: Orden con ID " + orderId + " no encontrada en la base de datos.");
+                    closeModal();
+                }
+            })
+            .catch(error => {
+                console.error("Error al buscar la orden:", error);
+                alert("Error al conectar con la base de datos. Intenta de nuevo.");
+                closeModal();
+            });
         }
 
         // 6. CONTROL DEL MODAL
         function openModal() {
             modalOverlay.classList.remove('hidden');
-            // Timeout pequeño para permitir que se quite el display:none antes de la opacidad
             setTimeout(() => {
                 modalOverlay.classList.remove('opacity-0');
                 modalContent.classList.remove('scale-95');
                 modalContent.classList.add('scale-100');
             }, 10);
-            barcodeInput.blur(); // Quitar foco para evitar escaneos fantasma
+            barcodeInput.blur(); 
         }
 
         function closeModal() {
@@ -300,7 +395,8 @@
             setTimeout(() => {
                 modalOverlay.classList.add('hidden');
                 resetModalButtons();
-                barcodeInput.focus(); // Regresar foco
+                barcodeInput.focus(); 
+                currentOrderData = null; // Limpiar datos de la orden
             }, 200);
         }
 
@@ -310,26 +406,46 @@
             btnLoading.classList.add('hidden');
         }
 
-        // 7. GUARDAR EN FIREBASE
+        // 7. GUARDAR EN FIREBASE (MODIFICADA)
         function saveToFirebase() {
             // UI Loading
             btnConfirm.classList.add('hidden');
             btnCancel.classList.add('hidden');
             btnLoading.classList.remove('hidden');
 
+            if (!currentOrderData) {
+                alert("Error interno: Datos de la orden faltantes.");
+                closeModal();
+                return;
+            }
+            
+            // Usar currentOrderData (que contiene los datos de la DB + los datos del código de barras)
             const record = {
-                codigo_paquete: currentScanCode,
+                // Datos del escaneo
+                codigo_paquete: currentOrderData.fullCode,
                 tejedor: weaverInput.value,
                 fecha_scan: firebase.firestore.FieldValue.serverTimestamp(),
                 fecha_legible: new Date().toLocaleString('es-MX'),
-                tipo: 'produccion'
+                tipo: 'produccion',
+                
+                // Datos de la orden (extraídos)
+                order_id: currentOrderData.orderId,
+                partida: currentOrderData.partida || 'N/A',
+                codigo_modelo: currentOrderData.codigo || 'N/A',
+                cliente: currentOrderData.cliente || 'N/A',
+                maquina: currentOrderData.maquina || 'N/A',
+                
+                // Datos del paquete (extraídos del código)
+                paquete_actual: currentOrderData.paqueteActual, 
+                paquetes_totales: currentOrderData.paquetesTotales,
+                
+                // Podrías agregar más campos importantes de la orden original aquí si son necesarios
             };
 
             db.collection('registro_produccion').add(record)
             .then(() => {
-                addToHistory(currentScanCode, weaverInput.value);
+                addToHistory(currentOrderData.fullCode, weaverInput.value);
                 closeModal();
-                // Feedback de éxito extra (sonido o vibración opcional)
                 if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
             })
             .catch((error) => {
@@ -344,7 +460,6 @@
             sessionScans++;
             scanCount.textContent = sessionScans;
 
-            // Limpiar mensaje de "vacio" si es el primero
             if(sessionScans === 1) historyList.innerHTML = '';
 
             const time = new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'});
@@ -362,10 +477,8 @@
                 </div>
             `;
 
-            // Insertar al principio
             historyList.insertBefore(item, historyList.firstChild);
             
-            // Re-renderizar iconos nuevos
             lucide.createIcons();
         }
 
