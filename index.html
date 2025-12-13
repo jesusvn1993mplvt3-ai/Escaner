@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Producción - Cirineo</title>
+    <title>Generador de Papeletas - Cirineo</title>
     
     <link rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     
@@ -23,7 +23,7 @@
         /* ESTILOS GENERALES DE LA APP */
         body { background-color: #f1f5f9; height: 100vh; overflow: hidden; font-family: 'Roboto Condensed', sans-serif; }
         
-        /* CONTENEDOR DE CADA PAPELETA (SOLO EN PANTALLA) */
+        /* ESTILOS DE LA ETIQUETA (LABEL) */
         .label-wrapper {
             margin-bottom: 2rem; /* mb-8 */
             padding: 1rem; /* p-4 */
@@ -35,18 +35,18 @@
         .label-wrapper:hover {
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); /* hover:shadow-2xl */
         }
-        
-        /* ESTILOS DE LA ETIQUETA INTERNA (LABEL) */
+
         .label-preview-container {
             width: 6in;
             height: 4in;
             background-color: white;
             position: relative;
             box-sizing: border-box;
-            border: 2px solid #000; /* Borde visible de la etiqueta */
+            border: 2px solid #000; /* Borde de la etiqueta para previsualización */
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            transition: transform 0.2s;
         }
 
         /* Estilos internos de la etiqueta */
@@ -67,7 +67,7 @@
         .row-details { height: 23%; }
         .row-footer { height: 15%; }
 
-        /* ESTILOS CRÍTICOS DE IMPRESIÓN PARA ZEBRA */
+        /* ESTILOS CRÍTICOS DE IMPRESIÓN PARA ZEBRA (6x4) */
         @media print {
             /* Define el tamaño de la hoja de papel y elimina márgenes */
             @page { size: 6in 4in; margin: 0; }
@@ -106,7 +106,7 @@
                 page-break-after: avoid;
             }
 
-            /* Asegura que la etiqueta interna no tenga bordes o estilos de sombra extra */
+            /* Asegura que la etiqueta interna no tenga estilos de sombra extra */
             .label-preview-container { 
                 border: 2px solid #000 !important; /* Mantiene el borde estructural */
                 transform: none !important; 
@@ -167,7 +167,6 @@
             
             const currentPackageDisplay = order.displayPackageId || '1/1';
             const piecesInPackage = order.piecesInPackage || (order.packageSize === 'VARIO' ? 'VAR' : (order.packageSize || 50));
-            // Contenido del código de barras
             const barcodeValue = order.packageCode || `${order.partida}-${order.codigo}`;
 
             useEffect(() => {
@@ -443,34 +442,41 @@
             );
         };
 
+
         // --- APP PRINCIPAL ---
         const App = () => {
             const [orders, setOrders] = useState([]);
-            const [selectedOrder, setSelectedOrder] = useState(null);
-            const [packageLabels, setPackageLabels] = useState([]); 
+            const [selectedOrder, setSelectedOrder] = useState(null); // Orden completa seleccionada en la lista
+            const [packageLabels, setPackageLabels] = useState([]); // Array de datos de papeletas (una por paquete)
             const [loading, setLoading] = useState(true);
             const [filterText, setFilterText] = useState('');
             const [scanTrackerKey, setScanTrackerKey] = useState(0); // Clave para forzar re-renderizado
 
+            // Función para generar los datos de las papeletas por paquete
             const generatePackageLabels = (order) => {
                 const totalPieces = order.totalPedido || 0;
+                // Usar 50 como fallback si no se define packageSize o es 'VARIO'
                 const packageSizeValue = order.packageSize === 'VARIO' || !order.packageSize ? 50 : (Number(order.packageSize) || 50); 
+                
+                // Calcular N: número total de paquetes
                 const N = totalPieces > 0 ? Math.ceil(totalPieces / packageSizeValue) : 1; 
 
                 const labels = [];
                 for (let i = 1; i <= N; i++) {
+                    // Piezas en este paquete
                     const piecesInThisPackage = i < N ? packageSizeValue : (totalPieces % packageSizeValue || packageSizeValue);
                     
-                    // Código de Barcode: ID_ORDEN-PARTIDA-CODIGO-PAQUETE_TOTAL|INDICE_ARRAY
+                    // Formato del Barcode: ID_ORDEN-PARTIDA-CODIGO-PAQUETE_TOTAL|INDICE_ARRAY
                     const arrayIndex = i - 1;
                     const packageCode = `${order.id}-${order.partida}-${order.codigo}-${i}_${N}|${arrayIndex}`;
 
                     labels.push({
                         ...order,
+                        // Propiedades específicas del paquete
                         packageIndex: i, 
                         totalPackages: N, 
                         piecesInPackage: piecesInThisPackage,
-                        packageCode: packageCode, // Usado como ID de documento en Firestore
+                        packageCode: packageCode, // Este es el código único que ahora incluye el ID y el índice.
                         displayPackageId: `${i}/${N}`, 
                     });
                 }
@@ -482,7 +488,7 @@
                 setScanTrackerKey(prev => prev + 1); 
             }, []);
 
-            // Cargar órdenes activas
+            // 1. Cargar órdenes activas
             useEffect(() => {
                 const unsubscribe = db.collection('orders')
                     .where('status', '!=', 'ARCHIVADO')
@@ -499,7 +505,7 @@
                 return () => unsubscribe();
             }, []);
             
-            // Generar papeletas y resetear el tracker al seleccionar una orden
+            // 2. Generar papeletas y resetear el tracker al seleccionar una orden
             useEffect(() => {
                 if (selectedOrder) {
                     setPackageLabels(generatePackageLabels(selectedOrder));
@@ -509,6 +515,8 @@
                 }
             }, [selectedOrder]);
 
+
+            // Filtrado
             const filteredOrders = useMemo(() => {
                 if (!filterText) return orders;
                 const txt = filterText.toUpperCase();
