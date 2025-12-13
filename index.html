@@ -168,7 +168,8 @@
             const currentPackageDisplay = order.displayPackageId || '1/1';
             const piecesInPackage = order.piecesInPackage || (order.packageSize === 'VARIO' ? 'VAR' : (order.packageSize || 50));
             
-            // Contenido del código de barras: CÓDIGO_MODELO-PARTIDA-INDICE_PAQUETE
+            // Contenido del código de barras: CÓDIGO_MODELO-PARTIDA-INDICE
+            // Se mantiene el formato original solicitado: {código}-{partida}-{índice_paquete}
             const barcodeValue = order.packageCode || `${order.codigo}-${order.partida}-1`;
 
             useEffect(() => {
@@ -304,7 +305,6 @@
                 }
                 
                 // Suscripción en tiempo real a los documentos de la orden actual
-                // Nota: Usar 'where' con 'orderCode' para filtrar solo escaneos de esta orden
                 const unsubscribe = db.collection('registro_produccion')
                     .where('orderId', '==', String(orderId)) 
                     .onSnapshot(snapshot => {
@@ -326,7 +326,6 @@
 
             // Clasificar etiquetas en Escaneadas y Pendientes
             const { scannedPackages, pendingPackages } = useMemo(() => {
-                // El campo que se escanea en la DB es 'codigo_paquete'
                 const scannedCodes = new Set(scannedData.map(d => d.codigo_paquete));
                 const packages = packageLabels.map(label => ({
                     ...label,
@@ -344,26 +343,32 @@
             // Manejar la acción de escaneo (ENTER)
             const handleScanSubmit = async (e) => {
                 e.preventDefault();
-                // Limpiar el código escaneado para normalizarlo (manejar escáneres)
                 let code = scanInput.trim().toUpperCase(); 
-                
-                // Intentar normalizar el código de barras si contiene el caracter '
-                // Esto ayuda a manejar el error previo: 1765486167007'1'6 (solo si la estructura es Orden-Indice-Total)
-                // if (code.includes("'") && code.split("'").length === 3) {
-                //     code = code.replace(/'/g, '-');
-                // }
-                
                 setScanInput(''); // Limpiar inmediatamente el input
+                
                 if (!code || !orderId) {
                     setScanStatus({ message: 'Código inválido o no hay orden seleccionada.', type: 'error' });
                     return;
                 }
+                
+                // ----------------------------------------------------
+                // --- LÓGICA DE NORMALIZACIÓN DEL CÓDIGO ESCANEADO ---
+                // ----------------------------------------------------
+                // El escáner envía M024'DIC25?02'1
+                // 1. Reemplazar comillas simples (') por guiones (-)
+                code = code.replace(/'/g, '-');
+                // Resultado intermedio: M024-DIC25?02-1
+                
+                // 2. Reemplazar signos de interrogación (?) por guiones bajos (_)
+                code = code.replace(/\?/g, '_');
+                // Resultado final (normalizado): M024-DIC25_02-1
+                // ----------------------------------------------------
 
-                // Buscar el paquete objetivo por el código completo generado
+                // Buscar el paquete objetivo por el código normalizado
                 const targetPackage = packageLabels.find(p => p.packageCode === code);
 
                 if (!targetPackage) {
-                    setScanStatus({ message: `Error: El código ${code} no pertenece a esta orden.`, type: 'error' });
+                    setScanStatus({ message: `Error: El código ${code} normalizado no pertenece a esta orden.`, type: 'error' });
                     return;
                 }
                 
@@ -377,18 +382,16 @@
 
                 // 2. Registrar escaneo en 'registro_produccion'
                 try {
-                    // El ID del documento debe ser generado automáticamente o ser un hash único. 
-                    // Usaremos un ID generado automáticamente, como se ve en la base de datos (0AK0KXK...):
                     const docRef = db.collection('registro_produccion').doc();
                     
                     const scanData = {
-                        codigo_paquete: code, // M024-DIC25_02-1
-                        orderId: String(orderId), // Nuevo campo para vincular a la orden (opcional pero útil)
+                        codigo_paquete: code, // Código normalizado (Ej: M024-DIC25_02-1)
+                        orderId: String(orderId), 
                         fecha: FieldValue.serverTimestamp(),
-                        fecha_scan: new Date().toLocaleTimeString('es-MX') + ' p.m.', // No es exacto, pero simula el formato de la imagen.
+                        fecha_scan: new Date().toLocaleTimeString('es-MX') + ' p.m.', 
                         fecha_legible: new Date().toLocaleDateString('es-MX', {
                             day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                        }).replace(/\//g, '/'), // Simula el formato de fecha de la imagen
+                        }).replace(/\//g, '/'), 
                         tejedor: tejedoraName,
                         tipo: "produccion",
                         // Otros datos útiles
@@ -478,9 +481,9 @@
             const [packageLabels, setPackageLabels] = useState([]); 
             const [loading, setLoading] = useState(true);
             const [filterText, setFilterText] = useState('');
-            const [scanTrackerKey, setScanTrackerKey] = useState(0); // Para forzar el refresco del tracker
+            const [scanTrackerKey, setScanTrackerKey] = useState(0); 
 
-            // Función para generar los datos de las papeletas por paquete (¡MODIFICADA!)
+            // Función para generar los datos de las papeletas por paquete (SE MANTIENE SIN CAMBIOS)
             const generatePackageLabels = (order) => {
                 const totalPieces = order.totalPedido || 0;
                 const packageSizeValue = order.packageSize === 'VARIO' || !order.packageSize ? 50 : (Number(order.packageSize) || 50); 
@@ -498,7 +501,7 @@
                         packageIndex: i, 
                         totalPackages: N, 
                         piecesInPackage: piecesInThisPackage,
-                        packageCode: packageCode, // Código final
+                        packageCode: packageCode, // Código final (Ej: M024-DIC25_02-1)
                         displayPackageId: `${i}/${N}`, 
                     });
                 }
@@ -531,7 +534,7 @@
             useEffect(() => {
                 if (selectedOrder) {
                     setPackageLabels(generatePackageLabels(selectedOrder));
-                    setScanTrackerKey(0); // Resetear el tracker al cambiar de orden
+                    setScanTrackerKey(0); 
                 } else {
                     setPackageLabels([]);
                 }
