@@ -17,6 +17,8 @@
         .timeline-line { position: absolute; top: 50%; left: 0; right: 0; height: 2px; background: #e2e8f0; z-index: 0; transform: translateY(-50%); }
         @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
         .pulse-error { animation: pulse-red 2s infinite; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -36,10 +38,19 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        const Icon = ({ name, size = 16, className }) => {
+        // Componente de Icono corregido para evitar herencia de estilos
+        const Icon = ({ name, size = 16, className = "" }) => {
             const ref = useRef(null);
             useEffect(() => {
-                if (ref.current) ref.current.innerHTML = lucide.icons[name]?.toSvg({ width: size, height: size, class: className });
+                if (ref.current) {
+                    ref.current.innerHTML = ''; // Limpiar previo
+                    const iconSvg = lucide.icons[name]?.toSvg({ 
+                        width: size, 
+                        height: size, 
+                        class: className 
+                    });
+                    if (iconSvg) ref.current.innerHTML = iconSvg;
+                }
             }, [name, className, size]);
             return <span ref={ref} className="flex items-center justify-center"></span>;
         };
@@ -71,7 +82,7 @@
             const groupedPartidas = useMemo(() => {
                 const groups = {};
                 orders.forEach(o => {
-                    const key = o.partida || '';
+                    const key = o.partida;
                     if (!key) return; 
                     if (!groups[key]) groups[key] = [];
                     groups[key].push(o);
@@ -87,9 +98,16 @@
                 let pulseClass = "";
 
                 if (stepLog) {
-                    if (stepLog.status === 'RED') { statusColor = "bg-red-100 text-red-600 border-red-500 font-bold"; pulseClass = "pulse-error"; }
-                    else if (stepLog.status === 'ORANGE') { statusColor = "bg-orange-100 text-orange-600 border-orange-500 font-bold"; }
-                    else if (stepLog.status === 'GREEN') { statusColor = "bg-green-100 text-green-700 border-green-500"; }
+                    if (stepLog.status === 'RED') { 
+                        statusColor = "bg-red-100 text-red-600 border-red-500 font-bold"; 
+                        pulseClass = "pulse-error"; 
+                    }
+                    else if (stepLog.status === 'ORANGE') { 
+                        statusColor = "bg-orange-100 text-orange-600 border-orange-500 font-bold"; 
+                    }
+                    else if (stepLog.status === 'GREEN') { 
+                        statusColor = "bg-green-100 text-green-700 border-green-500"; 
+                    }
                 }
 
                 return (
@@ -107,10 +125,14 @@
 
             return (
                 <div className="flex h-screen overflow-hidden">
+                    {/* BARRA LATERAL IZQUIERDA */}
                     {view !== 'DETALLE' && (
                         <div className="w-full md:w-80 bg-slate-900 text-white flex flex-col h-full shrink-0 shadow-xl z-20">
                             <div className="p-4 border-b border-slate-700 bg-slate-800">
-                                <h1 className="font-bold text-xl flex items-center gap-2"><Icon name="radar" className="text-cyan-400"/> RASTREO</h1>
+                                <h1 className="font-bold text-xl flex items-center gap-2">
+                                    <Icon name="radar" size={20} className="text-cyan-400"/> 
+                                    RASTREO
+                                </h1>
                             </div>
                             <div className="flex-grow overflow-y-auto p-2 space-y-2">
                                 {Object.keys(groupedPartidas).sort().map(pName => (
@@ -124,70 +146,117 @@
                         </div>
                     )}
 
+                    {/* ÁREA DE CONTENIDO */}
                     <div className="flex-grow bg-slate-100 flex flex-col relative h-full overflow-hidden">
+                        
+                        {/* VISTA: LISTA DE ÓRDENES DENTRO DE PARTIDA */}
                         {view === 'ORDENES' && selectedPartida && (
-                            <div className="absolute inset-0 bg-white/95 z-30 flex flex-col p-6 animate-in fade-in duration-300">
-                                <button onClick={() => setView('PARTIDAS')} className="mb-4 text-slate-500 font-bold flex items-center gap-2"><Icon name="arrow-left"/> VOLVER</button>
-                                <h2 className="text-2xl font-black text-slate-800 mb-6 border-b pb-2">PARTIDA: <span className="text-cyan-600">{selectedPartida}</span></h2>
+                            <div className="absolute inset-0 bg-white/95 z-30 flex flex-col p-6 animate-fade-in">
+                                <button onClick={() => setView('PARTIDAS')} className="mb-4 text-slate-500 font-bold flex items-center gap-2 hover:text-slate-800 transition-colors">
+                                    <Icon name="arrow-left" size={18} /> 
+                                    VOLVER A PARTIDAS
+                                </button>
+                                <h2 className="text-2xl font-black text-slate-800 mb-6 border-b pb-2 uppercase">
+                                    PARTIDA: <span className="text-cyan-600">{selectedPartida}</span>
+                                </h2>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {groupedPartidas[selectedPartida].map(order => (
-                                        <div key={order.id} onClick={() => { setSelectedOrder(order); setView('DETALLE'); }} className="bg-white border hover:border-cyan-500 shadow-md p-5 rounded-xl cursor-pointer transition group">
-                                            <div className="text-xl font-black text-slate-800 group-hover:text-cyan-600">{order.codigo || ''}</div>
-                                            <div className="text-sm text-slate-600">{order.cliente || ''}</div>
+                                        <div key={order.id} onClick={() => { setSelectedOrder(order); setView('DETALLE'); }} 
+                                             className="bg-white border hover:border-cyan-500 shadow-md p-5 rounded-xl cursor-pointer transition group">
+                                            <div className="text-xl font-black text-slate-800 group-hover:text-cyan-600 uppercase">
+                                                {order.codigo || ''}
+                                            </div>
+                                            <div className="text-sm text-slate-500 font-medium">
+                                                {order.cliente || ''}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
+                        {/* VISTA: FLUJO DE PAQUETES (DETALLE) */}
                         {view === 'DETALLE' && selectedOrder && (
-                            <div className="flex flex-col h-full bg-white">
+                            <div className="flex flex-col h-full bg-white animate-fade-in">
                                 <div className="bg-slate-900 text-white p-4 shadow-md shrink-0 flex justify-between items-center">
                                     <div className="flex items-center gap-4">
-                                        <button onClick={() => setView('ORDENES')} className="bg-slate-700 p-2 rounded-full"><Icon name="arrow-left" size={20}/></button>
+                                        <button onClick={() => setView('ORDENES')} className="bg-slate-700 hover:bg-slate-600 p-2 rounded-full transition-colors">
+                                            <Icon name="arrow-left" size={20} />
+                                        </button>
                                         <div>
-                                            {selectedOrder.partida && <div className="text-[10px] text-cyan-400 font-bold tracking-widest uppercase">PARTIDA {selectedOrder.partida}</div>}
-                                            <div className="text-xl font-black leading-none">
+                                            {selectedOrder.partida && (
+                                                <div className="text-[10px] text-cyan-400 font-bold tracking-widest uppercase">
+                                                    PARTIDA {selectedOrder.partida}
+                                                </div>
+                                            )}
+                                            <div className="text-xl font-black leading-none uppercase">
                                                 {selectedOrder.codigo || ''} 
-                                                <span className="text-sm font-normal opacity-70 ml-2">{selectedOrder.cliente ? `(${selectedOrder.cliente})` : ''}</span>
+                                                {selectedOrder.cliente && (
+                                                    <span className="text-sm font-normal opacity-70 ml-2">({selectedOrder.cliente})</span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="flex-grow overflow-y-auto p-4 space-y-3">
+                                <div className="flex-grow overflow-y-auto p-4 space-y-3 bg-slate-50">
                                     {selectedOrder.progreso?.map((pkg, idx) => (
-                                        <div key={idx} className="bg-white border rounded-lg p-3 shadow-sm flex flex-col md:flex-row items-center gap-4">
+                                        <div key={idx} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm flex flex-col md:flex-row items-center gap-4">
                                             <div className="w-full md:w-48 shrink-0 border-b md:border-b-0 md:border-r border-slate-100">
-                                                <div className="font-black text-slate-800">{pkg.codigoUnico || ''}</div>
-                                                <div className="text-[10px] text-slate-500 font-bold uppercase">{pkg.piezaNombre || ''}</div>
+                                                <div className="font-black text-slate-800 text-sm md:text-base">{pkg.codigoUnico || ''}</div>
+                                                <div className="text-[9px] text-slate-400 font-bold uppercase truncate">{pkg.piezaNombre || ''}</div>
                                             </div>
-                                            <div className="flex-grow w-full relative h-12 flex items-center">
+                                            <div className="flex-grow w-full relative h-14 flex items-center">
                                                 <div className="timeline-line"></div>
-                                                <div className="flex justify-between items-center w-full">{STEPS.map(s => renderStep(s, pkg))}</div>
+                                                <div className="flex justify-between items-center w-full">
+                                                    {STEPS.map(s => renderStep(s, pkg))}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
+
+                        {/* ESTADO VACÍO */}
+                        {view === 'PARTIDAS' && (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-300">
+                                <Icon name="radar" size={80} className="mb-4 opacity-20"/>
+                                <p className="text-lg font-bold">Selecciona una Partida para ver el rastreo</p>
+                            </div>
+                        )}
                     </div>
 
+                    {/* MODAL HISTORIAL */}
                     {historyModal && (
-                        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setHistoryModal(null)}>
+                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in" onClick={() => setHistoryModal(null)}>
                             <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
-                                <div className="bg-slate-800 text-white p-3 font-bold flex justify-between">
-                                    <span>Historial: {historyModal.pkgCode}</span>
-                                    <button onClick={() => setHistoryModal(null)}><Icon name="x"/></button>
+                                <div className="bg-slate-900 text-white p-4 font-bold flex justify-between items-center">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs text-cyan-400 uppercase tracking-widest">Historial de Paquete</span>
+                                        <span className="text-lg">{historyModal.pkgCode}</span>
+                                    </div>
+                                    <button onClick={() => setHistoryModal(null)} className="hover:bg-slate-800 p-1 rounded">
+                                        <Icon name="x" size={24}/>
+                                    </button>
                                 </div>
-                                <div className="p-4 space-y-3">
+                                <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
                                     {historyModal.logs.map((log, i) => (
-                                        <div key={i} className={`border-l-4 pl-3 py-1 ${log.status === 'RED' ? 'border-red-500' : (log.status === 'ORANGE' ? 'border-orange-500' : 'border-green-500')}`}>
-                                            <div className="flex justify-between text-[10px] font-bold text-slate-400"><span>{log.step}</span><span>{new Date(log.timestamp).toLocaleTimeString()}</span></div>
-                                            <div className="font-bold text-sm">{log.status === 'RED' ? '🔴 INCIDENCIA' : (log.status === 'ORANGE' ? '🟠 SOLUCIONADO' : '🟢 OK')}</div>
-                                            {log.note && <div className="text-xs bg-slate-50 p-2 mt-1 rounded italic">"{log.note}"</div>}
+                                        <div key={i} className={`border-l-4 pl-4 py-1 ${log.status === 'RED' ? 'border-red-500' : (log.status === 'ORANGE' ? 'border-orange-500' : 'border-green-500')}`}>
+                                            <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase">
+                                                <span>{log.step}</span>
+                                                <span>{new Date(log.timestamp).toLocaleString()}</span>
+                                            </div>
+                                            <div className="font-bold text-sm">
+                                                {log.status === 'RED' ? '🔴 INCIDENCIA REPORTADA' : (log.status === 'ORANGE' ? '🟠 INCIDENCIA SOLUCIONADA' : '🟢 PASO COMPLETADO')}
+                                            </div>
+                                            {log.note && <div className="text-xs bg-slate-50 p-2 mt-2 rounded border border-slate-100 italic text-slate-600">"{log.note}"</div>}
+                                            <div className="text-[10px] text-slate-400 mt-1">Operador: {log.user || 'SISTEMA'}</div>
                                         </div>
                                     ))}
+                                </div>
+                                <div className="p-4 bg-slate-50 border-t">
+                                    <button onClick={() => setHistoryModal(null)} className="w-full py-2 bg-slate-800 text-white rounded font-bold uppercase text-sm tracking-wider">Cerrar</button>
                                 </div>
                             </div>
                         </div>
